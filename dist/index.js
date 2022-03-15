@@ -93,6 +93,10 @@ function run() {
                 pull_number: prNumber,
             });
             const config = yield getConfig(client, configPath);
+            if (!config) {
+                console.log("Could not get configuration, exiting");
+                return;
+            }
             const labels = pullRequest.labels;
             const labelNames = labels.map((l) => l.name);
             let numOfChangedFiles = pullRequest.changed_files;
@@ -100,7 +104,7 @@ function run() {
                 getChangedFiles(client, prNumber),
                 getCurrentReviewCount(client, prNumber),
             ]);
-            if (config.ignore_paths) {
+            if (config === null || config === void 0 ? void 0 : config.ignore_paths) {
                 changedFiles.forEach((file) => {
                     const ignorePaths = config.ignore_paths;
                     const ignore = ignorePaths.some((ignorePath) => {
@@ -148,12 +152,7 @@ function getChangedFiles(client, prNumber) {
             pull_number: prNumber,
         });
         const listFilesResponse = yield client.paginate(listFilesOptions);
-        core.debug(JSON.stringify(listFilesResponse));
         const changedFiles = listFilesResponse.map((f) => f.filename);
-        core.debug("found changed files:");
-        for (const file of changedFiles) {
-            core.debug("  " + file);
-        }
         return changedFiles;
     });
 }
