@@ -6,7 +6,7 @@ inputs:
     description: 'The GITHUB_TOKEN secret'
   configuration-path:
     description: 'The path for the configurations'
-    default: '.github/labeler.yml'
+    default: '.github/label-requires-reviews.yml'
     required: false
 runs:
   using: 'node16'
