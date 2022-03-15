@@ -1,2 +1,14 @@
-- label: "sensitive"
-  reviews: 2
+require_reviews_for_labels:
+  - label: "sensitive"
+    reviews: 2
+  - label: "nightwatch"
+    reviews: 1
+
+require_reviews_for_num_of_files_changed:
+  - num: 10
+    reviews: 2
+  - num: 20
+    reviews: 3
+
+ignore_paths:
+  - apps/web-e2e-nightwatch/**/*

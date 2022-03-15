@@ -25,6 +25,12 @@ describe("run", () => {
   it("get configurations", async () => {
     usingTestConfigYaml("label-requires-reviews.yml");
     mockGitHubResponseChangedFiles("foo.txt");
+    getPullMock.mockResolvedValue(<any>{
+      data: {
+        labels: [{ name: "sensitive" }],
+        changed_files: 1,
+      },
+    });
 
     await run();
   });
