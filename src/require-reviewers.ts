@@ -25,6 +25,11 @@ export async function run() {
     });
 
     const config = await getConfig(client, configPath);
+    if (!config) {
+      console.log("Could not get configuration, exiting");
+      return;
+    }
+
     const labels = pullRequest.labels;
     const labelNames: string[] = labels.map((l: any) => l.name);
     let numOfChangedFiles = pullRequest.changed_files;
@@ -34,7 +39,7 @@ export async function run() {
       getCurrentReviewCount(client, prNumber),
     ]);
 
-    if (config.ignore_paths) {
+    if (config?.ignore_paths) {
       changedFiles.forEach((file) => {
         const ignorePaths = config.ignore_paths;
         const ignore = ignorePaths.some((ignorePath) => {
@@ -95,16 +100,7 @@ async function getChangedFiles(
   });
 
   const listFilesResponse = await client.paginate(listFilesOptions);
-
-  core.debug(JSON.stringify(listFilesResponse));
-
   const changedFiles = listFilesResponse.map((f: any) => f.filename);
-
-  core.debug("found changed files:");
-  for (const file of changedFiles) {
-    core.debug("  " + file);
-  }
-
   return changedFiles;
 }
 

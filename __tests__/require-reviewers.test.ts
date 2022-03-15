@@ -20,6 +20,7 @@ const yamlFixtures = {
   "label-requires-reviews.2.yml": fs.readFileSync("__tests__/fixtures/label-requires-reviews.2.yml"),
   "label-requires-reviews.3.yml": fs.readFileSync("__tests__/fixtures/label-requires-reviews.3.yml"),
   "label-requires-reviews.4.yml": fs.readFileSync("__tests__/fixtures/label-requires-reviews.4.yml"),
+  "label-requires-reviews.5.yml": fs.readFileSync("__tests__/fixtures/label-requires-reviews.5.yml"),
 };
 
 afterAll(() => jest.restoreAllMocks());
@@ -166,6 +167,26 @@ describe("run", () => {
       filesChanged.length - 1,
     );
     expect(getMaxReviewsNeededSpy).toReturnWith(2);
+    expect(core.setFailed).not.toHaveBeenCalled();
+  });
+
+  it("test five", async () => {
+
+    const filesChanged = [
+    ];
+
+    usingTestConfigYaml("label-requires-reviews.5.yml");
+    mockGitHubResponseChangedFiles(...filesChanged);
+    getPullMock.mockResolvedValue(<any>{
+      data: {
+        labels: [],
+        changed_files: filesChanged.length,
+      },
+    });
+
+    await main.run();
+
+    expect(getMaxReviewsNeededSpy).not.toHaveBeenCalled();
     expect(core.setFailed).not.toHaveBeenCalled();
   });
 
