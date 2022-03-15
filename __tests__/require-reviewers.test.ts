@@ -1,7 +1,8 @@
-import * as main from "../src/require-reviewers";
-import * as reviewsNeeded from "../src/max-reviews-needed";
+import { RequireReviewers } from "../src/require-reviewers";
 import * as github from "@actions/github";
 import * as core from "@actions/core";
+
+const main = new RequireReviewers();
 
 const fs = jest.requireActual("fs");
 
@@ -11,9 +12,11 @@ jest.mock("@actions/github");
 const gh = github.getOctokit("_");
 
 const reposMock = jest.spyOn(gh.rest.repos, "getContent");
-const paginateMock = jest.spyOn(gh, "paginate");
 const getPullMock = jest.spyOn(gh.rest.pulls, "get");
-const getMaxReviewsNeededSpy = jest.spyOn(reviewsNeeded, "getMaxReviewsNeeded");
+
+const getMaxReviewsNeededSpy = jest.spyOn(main, "getMaxReviewsNeeded");
+const getCurrentReviewCountSpy = jest.spyOn(main, "getCurrentReviewCount");
+const getChangedFilesSpy = jest.spyOn(main, "getChangedFiles");
 
 const yamlFixtures = {
   "label-requires-reviews.1.yml": fs.readFileSync("__tests__/fixtures/label-requires-reviews.1.yml"),
@@ -35,7 +38,8 @@ describe("run", () => {
     ];
 
     usingTestConfigYaml("label-requires-reviews.1.yml");
-    mockGitHubResponseChangedFiles(...filesChanged);
+    getChangedFilesSpy.mockReturnValue(Promise.resolve(filesChanged));
+    getCurrentReviewCountSpy.mockReturnValue(Promise.resolve(2));
     getPullMock.mockResolvedValue(<any>{
       data: {
         labels: [{ name: "sensitive" }],
@@ -73,7 +77,8 @@ describe("run", () => {
     ];
 
     usingTestConfigYaml("label-requires-reviews.2.yml");
-    mockGitHubResponseChangedFiles(...filesChanged);
+    getChangedFilesSpy.mockReturnValue(Promise.resolve(filesChanged));
+    getCurrentReviewCountSpy.mockReturnValue(Promise.resolve(20));
     getPullMock.mockResolvedValue(<any>{
       data: {
         labels: [{ name: "nightwatch" }],
@@ -104,7 +109,8 @@ describe("run", () => {
     ];
 
     usingTestConfigYaml("label-requires-reviews.3.yml");
-    mockGitHubResponseChangedFiles(...filesChanged);
+    getChangedFilesSpy.mockReturnValue(Promise.resolve(filesChanged));
+    getCurrentReviewCountSpy.mockReturnValue(Promise.resolve(10));
     getPullMock.mockResolvedValue(<any>{
       data: {
         labels: [{ name: "nightwatch" }],
@@ -136,7 +142,8 @@ describe("run", () => {
     ];
 
     usingTestConfigYaml("label-requires-reviews.4.yml");
-    mockGitHubResponseChangedFiles(...filesChanged);
+    getChangedFilesSpy.mockReturnValue(Promise.resolve(filesChanged));
+    getCurrentReviewCountSpy.mockReturnValue(Promise.resolve(2));
     getPullMock.mockResolvedValue(<any>{
       data: {
         labels: [{ name: "sensitive" }, { name: "nightwatch" }],
@@ -176,7 +183,8 @@ describe("run", () => {
     ];
 
     usingTestConfigYaml("label-requires-reviews.5.yml");
-    mockGitHubResponseChangedFiles(...filesChanged);
+    getChangedFilesSpy.mockReturnValue(Promise.resolve(filesChanged));
+    getCurrentReviewCountSpy.mockReturnValue(Promise.resolve(0));
     getPullMock.mockResolvedValue(<any>{
       data: {
         labels: [],
@@ -190,15 +198,85 @@ describe("run", () => {
     expect(core.setFailed).not.toHaveBeenCalled();
   });
 
+  it("Not enough reviews (label)", async () => {
+
+    const filesChanged = [
+      "apps/web/src/containers/class/class.ts",
+      "apps/web-e2e-nightwatch/src/utils/apiUtils.ts"
+    ];
+
+    usingTestConfigYaml("label-requires-reviews.1.yml");
+    getChangedFilesSpy.mockReturnValue(Promise.resolve(filesChanged));
+    getCurrentReviewCountSpy.mockReturnValue(Promise.resolve(0));
+    getPullMock.mockResolvedValue(<any>{
+      data: {
+        labels: [{ name: "sensitive" }],
+        changed_files: filesChanged.length,
+      },
+    });
+
+    await main.run();
+
+    expect(getMaxReviewsNeededSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        require_reviews_for_labels: [
+          {
+            label: "sensitive",
+            reviews: 2,
+          },
+          {
+            label: "nightwatch",
+            reviews: 1,
+          }
+        ],
+      }),
+      ["sensitive"],
+      filesChanged.length,
+    );
+    expect(getMaxReviewsNeededSpy).toReturnWith(2);
+    expect(core.setFailed).toHaveBeenCalled();
+
+  });
+
+  it("Not enough reviews (num of files changed)", async () => {
+
+    const filesChanged = [
+      "apps/web/src/containers/class/class.ts",
+      "apps/web-e2e-nightwatch/src/utils/apiUtils.ts",
+      "some/random/file.ts"
+    ];
+
+    usingTestConfigYaml("label-requires-reviews.3.yml");
+    getChangedFilesSpy.mockReturnValue(Promise.resolve(filesChanged));
+    getCurrentReviewCountSpy.mockReturnValue(Promise.resolve(5));
+    getPullMock.mockResolvedValue(<any>{
+      data: {
+        labels: [{ name: "sensitive" }],
+        changed_files: filesChanged.length,
+      },
+    });
+
+    await main.run();
+
+    expect(getMaxReviewsNeededSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        require_reviews_for_num_of_files_changed: [
+          { num: 3, reviews: 30 }, { num: 2, reviews: 20 }, { num: 1, reviews: 10 },
+        ],
+        ignore_paths: ["apps/web-e2e-nightwatch/**/*"]
+      }),
+      ["sensitive"],
+      filesChanged.length - 1,
+    );
+    expect(getMaxReviewsNeededSpy).toReturnWith(20);
+    expect(core.setFailed).toHaveBeenCalled();
+
+  });
+
 })
 
 function usingTestConfigYaml(fixtureName: keyof typeof yamlFixtures): void {
   reposMock.mockResolvedValue(<any>{
     data: { content: yamlFixtures[fixtureName], encoding: "utf8" },
   });
-}
-
-function mockGitHubResponseChangedFiles(...files: string[]): void {
-  const returnValue = files.map((f) => ({ filename: f }));
-  paginateMock.mockReturnValue(<any>returnValue);
 }

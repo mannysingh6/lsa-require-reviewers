@@ -1,37 +1,6 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 2322:
-/***/ ((__unused_webpack_module, exports) => {
-
-"use strict";
-
-Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getMaxReviewsNeeded = void 0;
-function getMaxReviewsNeeded(config, labels, numOfChangedFiles) {
-    let maxReviewsNeeded = 0;
-    if (config.require_reviews_for_labels) {
-        for (const label of labels) {
-            const labelConfig = config.require_reviews_for_labels.find((c) => c.label === label);
-            if (labelConfig) {
-                maxReviewsNeeded = Math.max(maxReviewsNeeded, labelConfig.reviews);
-            }
-        }
-    }
-    if (config.require_reviews_for_num_of_files_changed) {
-        const sortedConfig = config.require_reviews_for_num_of_files_changed.sort((a, b) => b.num - a.num);
-        const numConfig = sortedConfig.find((c) => c.num <= numOfChangedFiles);
-        if (numConfig) {
-            maxReviewsNeeded = Math.max(maxReviewsNeeded, numConfig.reviews);
-        }
-    }
-    return maxReviewsNeeded;
-}
-exports.getMaxReviewsNeeded = getMaxReviewsNeeded;
-
-
-/***/ }),
-
 /***/ 7555:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -70,121 +39,142 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.run = void 0;
+exports.requireReviewers = exports.RequireReviewers = void 0;
 const core = __importStar(__nccwpck_require__(2186));
 const github = __importStar(__nccwpck_require__(5438));
 const yaml = __importStar(__nccwpck_require__(1917));
 const minimatch_1 = __nccwpck_require__(3973);
-const max_reviews_needed_1 = __nccwpck_require__(2322);
-function run() {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            const token = core.getInput("repo-token", { required: true });
-            const configPath = core.getInput("configuration-path", { required: true });
-            const prNumber = getPrNumber();
-            if (!prNumber) {
-                console.log("Could not get pull request number from context, exiting");
-                return;
+class RequireReviewers {
+    run() {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const token = core.getInput("repo-token", { required: true });
+                const configPath = core.getInput("configuration-path", { required: true });
+                const prNumber = this.getPrNumber();
+                if (!prNumber) {
+                    console.log("Could not get pull request number from context, exiting");
+                    return;
+                }
+                const client = github.getOctokit(token);
+                const { data: pullRequest } = yield client.rest.pulls.get({
+                    owner: github.context.repo.owner,
+                    repo: github.context.repo.repo,
+                    pull_number: prNumber,
+                });
+                const config = yield this.getConfig(client, configPath);
+                if (!config) {
+                    console.log("Could not get configuration, exiting");
+                    return;
+                }
+                const labels = pullRequest.labels;
+                const labelNames = labels.map((l) => l.name);
+                let numOfChangedFiles = pullRequest.changed_files;
+                const [changedFiles, currentReviewCount] = yield Promise.all([
+                    this.getChangedFiles(client, prNumber),
+                    this.getCurrentReviewCount(client, prNumber),
+                ]);
+                if (config === null || config === void 0 ? void 0 : config.ignore_paths) {
+                    changedFiles.forEach((file) => {
+                        const ignorePaths = config.ignore_paths;
+                        const ignore = ignorePaths.some((ignorePath) => {
+                            const minimatch = new minimatch_1.Minimatch(ignorePath);
+                            return minimatch.match(file);
+                        });
+                        if (ignore) {
+                            numOfChangedFiles = Math.max(0, numOfChangedFiles - 1);
+                        }
+                    });
+                }
+                console.log('config: ', config);
+                console.log('labels: ', labelNames);
+                console.log('numOfChangedFiles: ', numOfChangedFiles);
+                console.log('changedFiles: ', changedFiles);
+                console.log('currentReviewCount: ', currentReviewCount);
+                const maxReviewsNeeded = this.getMaxReviewsNeeded(config, labelNames, numOfChangedFiles);
+                console.log('maxReviewsNeeded:', maxReviewsNeeded);
+                if (maxReviewsNeeded > currentReviewCount) {
+                    const reviewsNeeded = maxReviewsNeeded - currentReviewCount;
+                    console.log('reviewsNeeded:', reviewsNeeded);
+                    core.setFailed(`Need to add ${reviewsNeeded} more reviews`);
+                }
             }
-            const client = github.getOctokit(token);
-            const { data: pullRequest } = yield client.rest.pulls.get({
+            catch (error) {
+                console.error(error);
+                core.error(error);
+                core.setFailed(error.message);
+            }
+        });
+    }
+    getMaxReviewsNeeded(config, labels, numOfChangedFiles) {
+        let maxReviewsNeeded = 0;
+        if (config.require_reviews_for_labels) {
+            for (const label of labels) {
+                const labelConfig = config.require_reviews_for_labels.find((c) => c.label === label);
+                if (labelConfig) {
+                    maxReviewsNeeded = Math.max(maxReviewsNeeded, labelConfig.reviews);
+                }
+            }
+        }
+        if (config.require_reviews_for_num_of_files_changed) {
+            const sortedConfig = config.require_reviews_for_num_of_files_changed.sort((a, b) => b.num - a.num);
+            const numConfig = sortedConfig.find((c) => c.num <= numOfChangedFiles);
+            if (numConfig) {
+                maxReviewsNeeded = Math.max(maxReviewsNeeded, numConfig.reviews);
+            }
+        }
+        return maxReviewsNeeded;
+    }
+    getCurrentReviewCount(client, prNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const listReviewsOptions = client.rest.pulls.listReviews.endpoint.merge({
                 owner: github.context.repo.owner,
                 repo: github.context.repo.repo,
                 pull_number: prNumber,
             });
-            const config = yield getConfig(client, configPath);
-            if (!config) {
-                console.log("Could not get configuration, exiting");
-                return;
-            }
-            const labels = pullRequest.labels;
-            const labelNames = labels.map((l) => l.name);
-            let numOfChangedFiles = pullRequest.changed_files;
-            const [changedFiles, currentReviewCount] = yield Promise.all([
-                getChangedFiles(client, prNumber),
-                getCurrentReviewCount(client, prNumber),
-            ]);
-            if (config === null || config === void 0 ? void 0 : config.ignore_paths) {
-                changedFiles.forEach((file) => {
-                    const ignorePaths = config.ignore_paths;
-                    const ignore = ignorePaths.some((ignorePath) => {
-                        const minimatch = new minimatch_1.Minimatch(ignorePath);
-                        return minimatch.match(file);
-                    });
-                    if (ignore) {
-                        numOfChangedFiles = Math.max(0, numOfChangedFiles - 1);
-                    }
-                });
-            }
-            console.log('config: ', config);
-            console.log('labels: ', labelNames);
-            console.log('numOfChangedFiles: ', numOfChangedFiles);
-            console.log('changedFiles: ', changedFiles);
-            console.log('currentReviewCount: ', currentReviewCount);
-            const maxReviewsNeeded = (0, max_reviews_needed_1.getMaxReviewsNeeded)(config, labelNames, numOfChangedFiles);
-            console.log('maxReviewsNeeded:', maxReviewsNeeded);
-            if (maxReviewsNeeded > currentReviewCount) {
-                const reviewsNeeded = maxReviewsNeeded - currentReviewCount;
-                console.log('reviewsNeeded:', reviewsNeeded);
-                core.setFailed(`Need to add ${reviewsNeeded} more reviews`);
-            }
-        }
-        catch (error) {
-            console.error(error);
-            core.error(error);
-            core.setFailed(error.message);
-        }
-    });
-}
-exports.run = run;
-function getPrNumber() {
-    const pullRequest = github.context.payload.pull_request;
-    if (!pullRequest) {
-        return undefined;
+            const listReviewsResponse = yield client.paginate(listReviewsOptions);
+            return listReviewsResponse.length;
+        });
     }
-    return pullRequest.number;
-}
-function getChangedFiles(client, prNumber) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const listFilesOptions = client.rest.pulls.listFiles.endpoint.merge({
-            owner: github.context.repo.owner,
-            repo: github.context.repo.repo,
-            pull_number: prNumber,
+    ;
+    getChangedFiles(client, prNumber) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const listFilesOptions = client.rest.pulls.listFiles.endpoint.merge({
+                owner: github.context.repo.owner,
+                repo: github.context.repo.repo,
+                pull_number: prNumber,
+            });
+            const listFilesResponse = yield client.paginate(listFilesOptions);
+            const changedFiles = listFilesResponse.map((f) => f.filename);
+            return changedFiles;
         });
-        const listFilesResponse = yield client.paginate(listFilesOptions);
-        const changedFiles = listFilesResponse.map((f) => f.filename);
-        return changedFiles;
-    });
-}
-function getCurrentReviewCount(client, prNumber) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const listReviewsOptions = client.rest.pulls.listReviews.endpoint.merge({
-            owner: github.context.repo.owner,
-            repo: github.context.repo.repo,
-            pull_number: prNumber,
+    }
+    getPrNumber() {
+        const pullRequest = github.context.payload.pull_request;
+        if (!pullRequest) {
+            return undefined;
+        }
+        return pullRequest.number;
+    }
+    getConfig(client, configPath) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const content = yield this.fetchContent(client, configPath);
+            return yaml.load(content);
         });
-        const listReviewsResponse = yield client.paginate(listReviewsOptions);
-        return listReviewsResponse.length;
-    });
-}
-;
-function getConfig(client, configPath) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const content = yield fetchContent(client, configPath);
-        return yaml.load(content);
-    });
-}
-function fetchContent(client, repoPath) {
-    return __awaiter(this, void 0, void 0, function* () {
-        const response = yield client.rest.repos.getContent({
-            owner: github.context.repo.owner,
-            repo: github.context.repo.repo,
-            path: repoPath,
-            ref: github.context.sha,
+    }
+    fetchContent(client, repoPath) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const response = yield client.rest.repos.getContent({
+                owner: github.context.repo.owner,
+                repo: github.context.repo.repo,
+                path: repoPath,
+                ref: github.context.sha,
+            });
+            return Buffer.from(response.data.content, response.data.encoding).toString();
         });
-        return Buffer.from(response.data.content, response.data.encoding).toString();
-    });
+    }
 }
+exports.RequireReviewers = RequireReviewers;
+exports.requireReviewers = new RequireReviewers();
 
 
 /***/ }),
@@ -13968,7 +13958,7 @@ var exports = __webpack_exports__;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const require_reviewers_1 = __nccwpck_require__(7555);
-(0, require_reviewers_1.run)();
+require_reviewers_1.requireReviewers.run();
 
 })();
 

@@ -1,3 +1,3 @@
-import { run } from "./require-reviewers";
+import { requireReviewers } from "./require-reviewers";
 
-run();
+requireReviewers.run();
