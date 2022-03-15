@@ -23,6 +23,11 @@ const mockApi = {
           merge: jest.fn().mockReturnValue({}),
         },
       },
+      listReviews: {
+        endpoint: {
+          merge: jest.fn().mockReturnValue({}),
+        },
+      },
     },
     repos: {
       getContent: jest.fn(),

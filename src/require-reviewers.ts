@@ -1,10 +1,9 @@
 import * as core from "@actions/core";
 import * as github from "@actions/github";
 import * as yaml from "js-yaml";
-
-type ClientType = ReturnType<typeof github.getOctokit>;
-
-type Config = {}
+import { Minimatch } from "minimatch";
+import { getMaxReviewsNeeded } from "./max-reviews-needed";
+import { ClientType, Config } from "./models";
 
 export async function run() {
   try {
@@ -27,18 +26,47 @@ export async function run() {
 
     const config = await getConfig(client, configPath);
     const labels = pullRequest.labels;
-    const numOfChangedFiles = pullRequest.changed_files;
+    const labelNames: string[] = labels.map((l: any) => l.name);
+    let numOfChangedFiles = pullRequest.changed_files;
 
     const [changedFiles, currentReviewCount] = await Promise.all([
       getChangedFiles(client, prNumber),
       getCurrentReviewCount(client, prNumber),
     ]);
 
-    console.log(config);
-    console.log(labels);
-    console.log(numOfChangedFiles);
-    console.log(changedFiles);
-    console.log(currentReviewCount);
+    if (config.ignore_paths) {
+      changedFiles.forEach((file) => {
+        const ignorePaths = config.ignore_paths;
+        const ignore = ignorePaths.some((ignorePath) => {
+          const minimatch = new Minimatch(ignorePath);
+          return minimatch.match(file);
+        });
+
+        if (ignore) {
+          numOfChangedFiles = Math.max(0, numOfChangedFiles - 1);
+        }
+      });
+    }
+
+    console.log('config: ', config);
+    console.log('labels: ', labelNames);
+    console.log('numOfChangedFiles: ', numOfChangedFiles);
+    console.log('changedFiles: ', changedFiles);
+    console.log('currentReviewCount: ', currentReviewCount);
+
+    const maxReviewsNeeded = getMaxReviewsNeeded(
+      config,
+      labelNames,
+      numOfChangedFiles
+    );
+
+    console.log('maxReviewsNeeded:', maxReviewsNeeded);
+
+    if (maxReviewsNeeded > currentReviewCount) {
+      const reviewsNeeded = maxReviewsNeeded - currentReviewCount;
+      console.log('reviewsNeeded:', reviewsNeeded);
+      core.setFailed(`Need to add ${reviewsNeeded} more reviews`);
+    }
 
   } catch (error: any) {
     console.error(error);

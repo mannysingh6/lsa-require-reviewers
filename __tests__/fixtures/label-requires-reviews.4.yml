@@ -5,9 +5,11 @@ require_reviews_for_labels:
     reviews: 1
 
 require_reviews_for_num_of_files_changed:
-  - num: 10
+  - num: 1
+    reviews: 1
+  - num: 2
     reviews: 2
-  - num: 20
+  - num: 3
     reviews: 3
 
 ignore_paths:

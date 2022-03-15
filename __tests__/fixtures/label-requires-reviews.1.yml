@@ -1,0 +1,5 @@
+require_reviews_for_labels:
+  - label: "sensitive"
+    reviews: 2
+  - label: "nightwatch"
+    reviews: 1

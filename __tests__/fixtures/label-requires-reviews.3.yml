@@ -1,0 +1,10 @@
+require_reviews_for_num_of_files_changed:
+  - num: 1
+    reviews: 10
+  - num: 3
+    reviews: 30
+  - num: 2
+    reviews: 20
+
+ignore_paths:
+  - apps/web-e2e-nightwatch/**/*
