@@ -22,6 +22,7 @@ permissions:
 
 jobs:
   licensed:
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
     - uses: jonabc/setup-licensed@v1
